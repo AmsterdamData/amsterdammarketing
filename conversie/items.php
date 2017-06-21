@@ -20,6 +20,7 @@ class Items{
         $this->items = Array();
         $this->debug = false;
         $this->total = 0;
+        $this->noDateFilter = false;
     }
     
     function setOutput($url){
@@ -36,6 +37,10 @@ class Items{
     
     function setDebug($debug){
         $this->debug = $debug;
+    }
+    
+    function setNoDateFilter(){
+        $this->noDateFilter = true;
     }
       
     function debug($txt){
@@ -72,6 +77,7 @@ class Items{
         $result = true;
         //Check if published
         if(!(string)$item->content->properties->Published == "true") return false;
+        if($this->noDateFilter) return true;
         
         //Check Calendar
         $calendar = $this->getLink($item->link, "Calendar");
@@ -388,7 +394,126 @@ class Items{
             }
         }
         
-         $this->itemsJSON[] = $temp;
+        if(json_encode($temp)){
+            $this->itemsJSON[] = $temp;
+        } //If it can't be encoded (due to UTF-8 problems) don't add it!
+    }
+    
+
+    function addItemICS($item){
+        //Set default Array
+        //$temp = Array("trcid" => $trcid, "title" => null, "shortdescription" => null, "longdescription" => null, "calendarsummary" => null,"titleEN" => null, "shortdescriptionEN" => null, "longdescriptionEN" => null, "calendarsummaryEN" => null, "types" => Array(), "ids" => Array(), "locatienaam" => "", "city" => null, "adres" => null, "zipcode" => null, "latitude" => null, "longitude" => null, "urls" => Array(), "media" => Array(), "thumbnail" => null, "datepattern_startdate" => null, "datepattern_enddate" => null, "singledates" => Array(), "lastupdated" => date("Y-m-d H:i:s", strtotime($item->content->properties->Lastupdated)), "oDataContent" => $item);    
+        $temp = Array("trcid" => (string)$item->trcid, "title" => null, "details" => Array(), "types" => Array(), "location" => Array(), "urls" => Array(), "media" => Array(), "dates" => Array(), "lastupdated" => date("Y-m-d H:i:s", strtotime($item->content->properties->Lastupdated)));    
+        
+        //Extract needed links
+        $calendar = $this->getLink($item->link, "Calendar");
+
+        //$price = $this->getLink($item->link, "Price");
+        $contactinfo = $this->getLink($item->link, "Contactinfo");
+        $categories =  $this->getLink($item->link, "Trcitemcategory");
+        $types = $this->getLink($categories->inline->entry->link, "Types");
+        $eigenschappen = $this->getLink($categories->inline->entry->link, "Categories");
+        $media =  $this->getLink($item->link, "Medias");
+        $details =  $this->getLink($item->link, "Trcitemdetails");
+        $location =  $this->getLink($item->link, "Location");
+        
+        //Get Details (Dutch and English (NDTRC supports de, sp, it and fr as well))
+        foreach($details->inline->feed->entry as $language){
+            $temp["details"][(string)$language->content->properties->Lang] = Array(
+                "language" => (string)$language->content->properties->Lang,
+                 "title" => (string)$language->content->properties->Title,
+                 "calendarsummary" => (string)$language->content->properties->Calendarsummary,
+                 "shortdescription" => (string)$language->content->properties->Shortdescription,
+                 "longdescription" => (string)$language->content->properties->Longdescription
+                 );
+        }
+        $temp["title"] = $temp["details"]["nl"]["title"];
+
+        //Get Types    
+        foreach($types->inline->feed->entry as $type){
+            $temp["types"][] = Array("type" => (string)$type->content->properties->Value, "catid" => (string)$type->content->properties->Catid);
+        }
+        
+        global $def_categories;
+        //Get Eigenschappen 
+        $temp["eigenschappen"] = Array();
+        foreach($eigenschappen->inline->feed->entry as $eigenschap){
+            $catid = (string)$eigenschap->content->properties->Catid;
+            $temp["eigenschappen"][$catid] = (Array)$eigenschap->content->properties;
+            if(array_key_exists($catid, $def_categories)){
+                $temp["eigenschappen"][$catid]["CategoryArea"] = $def_categories[$catid][0];
+                $temp["eigenschappen"][$catid]["Category"] = $def_categories[$catid][1];
+            }
+            if(trim($temp["eigenschappen"][$catid]["Valueid"]) <> "" && trim($temp["eigenschappen"][$catid]["Value"]) == "") $temp["eigenschappen"][$catid]["Value"] = $temp["eigenschappen"][$catid]["Valueid"];
+            unset($temp["eigenschappen"][$catid]["Valueid"]);
+            unset($temp["eigenschappen"][$catid]["CatalogId"]);
+            unset($temp["eigenschappen"][$catid]["Datatype"]);
+            //$temp["eigenschappen"][] = Array((string)$eigenschap->content->properties->Catid, (string)$eigenschap->content->properties->Value);
+        }
+                
+        //Get Address
+        $addres = $this->getLink($location->inline->entry->link, "Addres");
+        $physical = $this->getLink($addres->inline->entry->link, "Physical");
+        
+        if($addres){
+            $temp["location"] = Array(
+            "name" => (string)$location->inline->entry->content->properties->Label->Value,
+            "city" => (string)$physical->inline->entry->content->properties->City->Value,
+            "adress" => trim((string)$physical->inline->entry->content->properties->Street->Value ." " .(string)$physical->inline->entry->content->properties->Housenr),
+            "zipcode" => (string)$physical->inline->entry->content->properties->Zipcode,
+            "latitude" =>  (string)$physical->inline->entry->content->properties->Ycoordinate,
+            "longitude" => (string)$physical->inline->entry->content->properties->Xcoordinate
+            );
+        }
+
+        //Get Media
+        foreach($media->inline->feed->entry as $media){
+            $temp["media"][] = Array("url" => (string)$media->content->properties->Hlink, "main" =>  (string)$media->content->properties->Main);
+        }
+         print("<PRE>");
+         print((string)$language->content->properties->Calendarsummary);
+         print("<HR>");
+         print_r($calendar);
+         print("<HR>");
+        //Get Calendar
+          if($calendar){
+                $patterns = $this->getLink($calendar->inline->entry->link, "Patterns");
+                $singles = $this->getLink($calendar->inline->entry->link, "Singles");
+                if($singles->inline->feed->entry->content){
+                    $temp["dates"]["singles"] = Array();
+                    foreach($singles->inline->feed->entry as $single){
+                        
+                        print("<BR/>");print_r($single);
+                        $temp["dates"]["singles"][] = str_replace("/","-", (string)$single->content->properties->Date);
+                    }
+                }
+                if($patterns->inline->feed->entry->content){
+                    foreach($patterns->inline->feed->entry as $period){
+                        print("<BR/>");print_r($period);
+                        $temp["dates"]["startdate"] = str_replace("/","-", (string)$period->content->properties->Startdate);
+                        $temp["dates"]["enddate"] = str_replace("/","-", (string)$period->content->properties->Enddate);
+                    }
+                }
+          }    
+         exit();
+         //GetPrice (Price is not yet included. Difficult although, because in TRC-XML Price can be saved at two different places.
+         //$priceResponse = $svc->LoadProperty($item, 'Price');
+         //print("<PRE>"); print_r($price); print("</PRE>");
+         
+
+        //Get Contactinfo (Currently only Urls, same can be done with Addresses, Mails, Phones and Faxes)
+        if($contactinfo){
+            $urls = $this->getLink($contactinfo->inline->entry->link, "Urls");
+            if($urls){
+                foreach($urls->inline->feed->entry as $url){
+                    $temp["urls"][] = (string)$url->content->properties->Value;
+                }
+            }
+        }
+        
+        if(json_encode($temp)){
+            $this->itemsJSON[] = $temp;
+        } //If it can't be encoded (due to UTF-8 problems) don't add it!
     }
     
     function getItems(){
@@ -403,6 +528,17 @@ class Items{
         $this->debug("Items downloaded");
     }    
     
+    function getCalendar(){
+        $this->debug("Start download list for ". $this->typestart ."*");
+        $this->getList();
+        $this->debug("List downloaded and filtered (". count($this->list) ." of ". $this->total ." items)");
+        foreach($this->list as $trcid){
+            $item = $this->getItem($trcid);
+            $this->addItemICS($item);
+        }
+        $this->debug("Items downloaded");        
+    }
+    
     function saveToJSON(){
         $fname = str_ireplace(".csv", ".json", $this->output);
         if($this->append){
@@ -411,7 +547,6 @@ class Items{
                 $this->itemsJSON[] = $item;
             }
         }
-        
         $f = fopen($fname, "w");
         fwrite($f, json_encode($this->itemsJSON));
         fclose($f);   

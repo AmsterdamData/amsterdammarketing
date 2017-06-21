@@ -26,6 +26,7 @@ $AODS->upload(DATAFOLDER . "Shoppen.json");
 $AODS->upload(DATAFOLDER . "Theater.json");
 $AODS->upload(DATAFOLDER . "UitInAmsterdam.json");
 
+/*
 $SDE = new SharedDataExchange();
 $SDE->setFolder("/Toerisme Zakelijk/Toerisme & Cultuur");
 $SDE->upload(DATAFOLDER . "Evenementen.csv");
@@ -39,4 +40,5 @@ $SDE->upload(DATAFOLDER . "Theater.csv");
 $SDE->setFolder("/Toerisme Zakelijk/Horeca/");
 $SDE->upload(DATAFOLDER . "EtenDrinken.csv");
 $SDE->upload(DATAFOLDER . "UitInAmsterdam.csv");
+*/
 ?>
