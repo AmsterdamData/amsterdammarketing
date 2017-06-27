@@ -568,24 +568,6 @@ class Items{
         $this->debug("Saved as CSV (" . $this->output . ")");
         
         $this->saveToJSON();
-        
-        /*
-        $fname = substr($this->output, strrpos($this->output, "/") + 1);
-        //And copy to amsterdamopendata.nl/files
-        $domain = 'amsterdamopendata.nl';
-        $domain = "217.77.130.133"; //Using IP directly because amsterdamopendata.nl is known to web.redant.net and is trying to connect locally.
-        $user = 'ftpadmin';
-        $password = 'Vae4eero';
-
-        $sftp = new Net_SFTP($domain, 22, 30);
-        if (!$sftp->login($user, $password)) {
-          exit('Login Failed');
-        } else {
-          $sftp->chdir('files');
-          $sftp->put($fname, $csv->contents());
-          $this->debug("Uploaded to amsterdamopendata.nl/files (" . $fname . ")");
-        }
-        */
     }
 } 
 ?>
